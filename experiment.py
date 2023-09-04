@@ -73,52 +73,122 @@ class _FitListener(model_base.FitListener):
 ########################################################################################
 class ExperimentRunner(object):
 
-    def __init__(self, dataset_name):
-        self.dataset_name = dataset_name
-        
+    def __print_separator__(self):
         print()
         print('='*100)
-        
+
+    def __print_init_words__(self):
+        print('Num training captions:      ', self.datasources.train.size)
+        print('Max training caption length:', self.dataset.training_proccaps.prefixes_indexes.shape[1]-1)
+        print('Vocab size:                 ', self.dataset.vocab_size)
+        print()
+    
+    def __init_dataset__(self, dataset_name: str):
         print('Starting dataset:', dataset_name)
-        datasources = helper_datasources.DataSources(dataset_name)
+        self.dataset_name = dataset_name
+        self.datasources = helper_datasources.DataSources(dataset_name)
+        self.dataset = data.Dataset(
+                min_token_freq        = config.min_token_freq,
+                training_datasource   = self.datasources.train,
+                validation_datasource = self.datasources.val,
+                testing_datasource    = self.datasources.test,
+            )
+        self.dataset.process()
+
+    def __init__(self, dataset_name):
+        self.__print_separator__()
 
         lib.create_dir(config.base_dir)
         self.completed = set()
         
-        self.dataset = data.Dataset(
-                min_token_freq        = config.min_token_freq,
-                training_datasource   = datasources.train,
-                validation_datasource = datasources.val,
-                testing_datasource    = datasources.test,
-            )
-        self.dataset.process()
+        self.__init_dataset__(dataset_name=dataset_name)
         
-        print('Num training captions:      ', datasources.train.size)
-        print('Max training caption length:', self.dataset.training_proccaps.prefixes_indexes.shape[1]-1)
-        print('Vocab size:                 ', self.dataset.vocab_size)
-        print()
+        self.__print_init_words__()
         
-        self.mean_training_caps_len = np.mean([ len(cap) for caption_group in datasources.train.caption_groups for cap in caption_group ])
+        self.mean_training_caps_len = np.mean([ len(cap) for caption_group in self.datasources.train.caption_groups for cap in caption_group ])
+        self.known_train_caps = { ' '.join(cap) for caption_group in self.datasources.train.caption_groups for cap in caption_group }
+        self.all_str_test_caps = [ [ ' '.join(cap) for cap in caption_group ] for caption_group in self.datasources.test.caption_groups ]
         
-        self.known_train_caps = { ' '.join(cap) for caption_group in datasources.train.caption_groups for cap in caption_group }
+        self.test_caps = self.datasources.test.first_captions
+        self.test_imgs = self.datasources.test.images
         
-        self.all_str_test_caps = [ [ ' '.join(cap) for cap in caption_group ] for caption_group in datasources.test.caption_groups ]
-        
-        self.test_caps = datasources.test.first_captions
-        self.test_imgs = datasources.test.images
-        
-        self.test_caps_ret = datasources.test.first_captions[:1000]
-        self.test_imgs_ret = datasources.test.images[:1000]
+        self.test_caps_ret = self.datasources.test.first_captions[:1000]
+        self.test_imgs_ret = self.datasources.test.images[:1000]
         
         with open(config.base_dir+'/imgs_'+dataset_name+'.txt', 'w', encoding='utf-8') as f:
-            for filename in datasources.test.image_filenames:
+            for filename in self.datasources.test.image_filenames:
                 print(str(filename), file=f)
         
         with open(config.base_dir+'/caps_'+dataset_name+'.txt', 'w', encoding='utf-8') as f:
-            for cap in datasources.test.first_captions:
+            for cap in self.datasources.test.first_captions:
                 print(str(' '.join(cap)), file=f)
         
-        #Prepare MSCOCO evaluation toolkit
+        self.__prepare_MSCOCO_evaluation_toolkit__()
+
+        if not lib.file_exists(config.base_dir+'/results.txt'):
+            self.__init__results__()
+        else:
+            self.__save_previous_results__()
+
+    ############################################
+
+    def __init__results__(self):
+        with open(config.base_dir+'/results.txt', 'w', encoding='utf-8') as f:
+            print(*[
+                    'dataset_name',
+                    'architecture',
+                    'run',
+                    'vocab_size',
+                    'num_training_caps',
+                    'mean_training_caps_len',
+                    'num_params',
+                    'geomean_pplx',
+                    'num_inf_pplx',
+                    'vocab_used',
+                    'vocab_used_frac',
+                    'mean_cap_len',
+                    'num_existing_caps',
+                    'num_existing_caps_frac',
+                    'existing_caps_CIDEr',
+                    'unigram_entropy',
+                    'bigram_entropy',
+                    'CIDEr',
+                    'METEOR',
+                    'ROUGE_L',
+                    'Bleu_1',
+                    'Bleu_2',
+                    'Bleu_3',
+                    'Bleu_4',
+                    'R@1',
+                    'R@5',
+                    'R@10',
+                    'median_rank',
+                    'R@1_frac',
+                    'R@5_frac',
+                    'R@10_frac',
+                    'median_rank_frac',
+                    'num_epochs',
+                    'training_time',
+                    'total_time',
+                ], sep='\t', file=f
+            )
+
+    def __save_previous_results__(self):
+        with open(config.base_dir+'/results.txt', 'r', encoding='utf-8') as f:
+            for line in f.readlines()[1:]:
+                [
+                    dataset_name,
+                    architecture,
+                    run,
+                ] = line.split('\t')[:3]
+                full_name = '_'.join([
+                    dataset_name,
+                    architecture,
+                    run
+                ])
+                self.completed.add(full_name)
+
+    def __prepare_MSCOCO_evaluation_toolkit__(self):
         with open(config.mscoco_dir+'/annotations/captions.json', 'w', encoding='utf-8') as f:
             print(str(json.dumps({
                     'info':        {
@@ -139,7 +209,7 @@ class ExperimentRunner(object):
                                 'date_captured': None,
                                 'height':        None
                             }
-                            for image_id in range(len(datasources.test.caption_groups))
+                            for image_id in range(len(self.datasources.test.caption_groups))
                         ],
                     'licenses':    [
                         ],
@@ -151,67 +221,10 @@ class ExperimentRunner(object):
                                 'caption':  ' '.join(caption)
                             }
                             for (caption_id, (image_id, caption)) in enumerate((image_id, caption)
-                            for (image_id, caption_group) in enumerate(datasources.test.caption_groups)
+                            for (image_id, caption_group) in enumerate(self.datasources.test.caption_groups)
                             for caption in caption_group)
                         ]
                 })), file=f)
-
-        if not lib.file_exists(config.base_dir+'/results.txt'):
-            with open(config.base_dir+'/results.txt', 'w', encoding='utf-8') as f:
-                print(*[
-                            'dataset_name',
-                            'architecture',
-                            'run',
-                            'vocab_size',
-                            'num_training_caps',
-                            'mean_training_caps_len',
-                            'num_params',
-                            'geomean_pplx',
-                            'num_inf_pplx',
-                            'vocab_used',
-                            'vocab_used_frac',
-                            'mean_cap_len',
-                            'num_existing_caps',
-                            'num_existing_caps_frac',
-                            'existing_caps_CIDEr',
-                            'unigram_entropy',
-                            'bigram_entropy',
-                            'CIDEr',
-                            'METEOR',
-                            'ROUGE_L',
-                            'Bleu_1',
-                            'Bleu_2',
-                            'Bleu_3',
-                            'Bleu_4',
-                            'R@1',
-                            'R@5',
-                            'R@10',
-                            'median_rank',
-                            'R@1_frac',
-                            'R@5_frac',
-                            'R@10_frac',
-                            'median_rank_frac',
-                            'num_epochs',
-                            'training_time',
-                            'total_time',
-                        ], sep='\t', file=f
-                    )
-        else:
-            with open(config.base_dir+'/results.txt', 'r', encoding='utf-8') as f:
-                for line in f.readlines()[1:]:
-                    [
-                            dataset_name,
-                            architecture,
-                            run,
-                        ] = line.split('\t')[:3]
-                    full_name = '_'.join([
-                            dataset_name,
-                            architecture,
-                            run
-                        ])
-                    self.completed.add(full_name)
-
-    ############################################
 
     def run(self, architecture, run):
         full_name = '_'.join(str(x) if x is not None else ''

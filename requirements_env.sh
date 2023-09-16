@@ -28,6 +28,5 @@ sudo apt-get install python-dev
 sudo apt-get install -y python-tk
 
 # clone first
+git clone git@github.com:tylin/coco-caption.git tools
 ./tools/coco-caption-master/get_stanford_models.sh
-
-pip2 install scikit-image==0.14.1

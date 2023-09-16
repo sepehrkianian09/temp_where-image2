@@ -7,7 +7,7 @@ def raw_data_dir(dataset_name):
     )  # Karpathy raw data expected (http://cs.stanford.edu/people/karpathy/deepimagesent/)
 
 
-mscoco_dir = "tools/coco-caption-master"  # MSCOCO evaluation toolkit expected (https://github.com/tylin/coco-caption)
+mscoco_dir = "tools/coco-caption"  # MSCOCO evaluation toolkit expected (https://github.com/tylin/coco-caption)
 
 base_dir = "results" if not debug else "results_test"
 base_dir_hyperpar = "hyperparams" if not debug else "hyperparams_test"

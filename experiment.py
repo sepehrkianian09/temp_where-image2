@@ -439,7 +439,7 @@ class ExperimentRunner(object):
 print('#'*100)
 print(lib.formatted_clock())
 
-for dataset_name in [ 'flickr8k', 'flickr30k', 'mscoco' ]:
+for dataset_name in [ 'flickr8k', 'flickr30k', 'coco' ]:
     exp = ExperimentRunner(dataset_name)
     for run in range(1, config.num_runs+1):
         if run == 1:

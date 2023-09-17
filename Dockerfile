@@ -8,6 +8,7 @@ FROM ubuntu:20.04
 
 COPY . .
 
+RUN ./requirements_dataset.sh
 RUN ./requirements_env.sh
 RUN ./requirements_install.sh
 
